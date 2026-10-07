@@ -1,0 +1,67 @@
+@import "tailwindcss";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/space-grotesk";
+
+/* DESIGN TOKENS. Components never use raw hex values, only these names.
+   Change a value here and the whole product follows. */
+@theme {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-figure: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #161616;       /* text, borders, hard shadows */
+  --color-canvas: #f6f4ef;    /* page background */
+  --color-sand: #e8e5dd;      /* signature panels */
+  --color-paper: #ffffff;     /* calm data surfaces */
+  --color-line: #d9d5ca;      /* hairline separators */
+  --color-amber: #f5a524;     /* accent: always paired with ink text */
+  --color-muted: #5e5e59;     /* secondary text (4.5:1+ on canvas and sand) */
+
+  /* Semantic: dark text on a soft tint, chosen for contrast */
+  --color-success: #236b40;  --color-success-soft: #e2f0e6;
+  --color-warning: #7a5200;  --color-warning-soft: #fbf0d2;
+  --color-danger: #a33626;   --color-danger-soft: #f8e3de;
+  --color-info: #2f6577;     --color-info-soft: #e0edf1;
+
+  --shadow-hard: 4px 4px 0 0 #161616;
+  --shadow-hard-sm: 2px 2px 0 0 #161616;
+}
+
+/* Level 3 of the intensity ladder: the cut-corner container.
+   clip-path also clips borders and shadows, so use it on flat fills only. */
+@utility notch {
+  clip-path: polygon(0 0, calc(100% - 36px) 0, 100% 36px, 100% 100%, 0 100%);
+}
+
+@layer base {
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+  /* Never remove focus. Ink ring, because amber on canvas is only ~2:1. */
+  :focus-visible {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 3px;
+  }
+}
+
+/* Motion that answers an action (dialog opens, toast arrives). */
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+.fade[data-state="open"] { animation: fade-in 150ms ease-out; }
+.fade[data-state="closed"] { animation: fade-out 120ms ease-in; }
+.toast-anim[data-state="open"] { animation: toast-in 160ms ease-out; }
+.toast-anim[data-state="closed"] { animation: fade-out 120ms ease-in; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

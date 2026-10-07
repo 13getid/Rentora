@@ -1,0 +1,10 @@
+{
+  "name": "rentora",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @rentora/web",
+    "build": "npm run build -w @rentora/web",
+    "typecheck": "npm run typecheck -w @rentora/web"
+  }
+}
