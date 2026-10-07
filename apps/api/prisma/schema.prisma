@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Enums: a fixed list of allowed values ----------
+enum Role {
+  OWNER
+  MANAGER
+  TENANT
+  MAINTENANCE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// ---------- The tenancy boundary ----------
+model Organization {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  status    OrgStatus @default(ACTIVE)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  memberships Membership[]
+  invitations Invitation[]
+  properties  Property[]
+  grants      PropertyAccessGrant[]
+  auditLogs   AuditLog[]
+
+  @@map("organizations")
+}
+
+// One login per person. Roles do NOT live here (see Membership).
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  fullName        String    @map("full_name")
+  phone           String?
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  isSystemAdmin   Boolean   @default(false) @map("is_system_admin")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  memberships Membership[]
+  sessions    Session[]
+  grantsGiven PropertyAccessGrant[] @relation("GrantedBy")
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+// "This user has THIS role in THAT organization."
+model Membership {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  role           Role
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grants       PropertyAccessGrant[]
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  email          String
+  role           Role
+  tokenHash      String    @unique @map("token_hash") // we store a HASH, never the raw token
+  expiresAt      DateTime  @map("expires_at")
+  acceptedAt     DateTime? @map("accepted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("invitations")
+}
+
+// Minimal for now. Phase 4 adds the real details and units.
+model Property {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  address        String?
+  city           String?
+  attributes     Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grants       PropertyAccessGrant[]
+
+  @@index([organizationId])
+  @@map("properties")
+}
+
+// Delegated access: "this manager may work on THIS property".
+model PropertyAccessGrant {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  membershipId   String    @map("membership_id") @db.Uuid
+  propertyId     String    @map("property_id") @db.Uuid
+  grantedById    String    @map("granted_by_id") @db.Uuid
+  expiresAt      DateTime? @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  property     Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  grantedBy    User         @relation("GrantedBy", fields: [grantedById], references: [id])
+
+  @@index([membershipId])
+  @@index([propertyId])
+  @@index([organizationId])
+  @@map("property_access_grants")
+}
+
+// One row per logged-in device, so we can "log out everywhere".
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  ip               String?
+  userAgent        String?   @map("user_agent")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// Append-only record of who did what. Nothing here is ever updated.
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String
+  entity         String?
+  entityId       String?  @map("entity_id")
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  actor        User?         @relation(fields: [actorUserId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
