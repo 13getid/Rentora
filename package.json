@@ -2,9 +2,11 @@
   "name": "rentora",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
+ 
   "scripts": {
-    "dev": "npm run dev -w @rentora/web",
-    "build": "npm run build -w @rentora/web",
-    "typecheck": "npm run typecheck -w @rentora/web"
-  }
+  "dev": "npm run dev -w @rentora/web",
+  "dev:api": "npm run dev -w @rentora/api",
+  "build": "npm run build -w @rentora/web",
+  "typecheck": "npm run typecheck -w @rentora/web && npm run typecheck -w @rentora/api"
+}
 }
