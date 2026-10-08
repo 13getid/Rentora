@@ -1,0 +1,85 @@
+### A. Sign up a second owner (a different person, a different organization)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{ "fullName": "Second Owner", "email": "second@example.com", "password": "CorrectHorse2026", "organizationName": "Second Estates" }
+
+### B. Log in as owner A  (run this before the requests below)
+# @name loginA
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }
+
+### C. Log in as owner B
+# @name loginB
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "second@example.com", "password": "CorrectHorse2026" }
+
+### 1. No token (expect 401 UNAUTHENTICATED)
+GET http://localhost:4000/api/v1/me
+
+### 2. Garbage token (expect 401)
+GET http://localhost:4000/api/v1/me
+Authorization: Bearer abc.def.ghi
+
+### 3. Valid token, A (expect 200 with A's memberships)
+GET http://localhost:4000/api/v1/me
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 4. Org context for A, no header needed (expect 200, role OWNER)
+GET http://localhost:4000/api/v1/demo/context
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 5. Owner-only route as A (expect 200)
+GET http://localhost:4000/api/v1/demo/owner-only
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 6. B names A's organization (expect 403 FORBIDDEN)
+GET http://localhost:4000/api/v1/demo/context
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{loginA.response.body.$.memberships[0].organizationId}}
+
+### 7. Malformed organization header (expect 400)
+GET http://localhost:4000/api/v1/demo/context
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+X-Organization-Id: not-a-uuid
+
+### 8. B with no header (expect 400 ORGANIZATION_REQUIRED, B has two organizations)
+GET http://localhost:4000/api/v1/demo/context
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+
+### 9. B as a TENANT in A's organization (expect 200, role TENANT)
+GET http://localhost:4000/api/v1/demo/context
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{loginA.response.body.$.memberships[0].organizationId}}
+
+### 10. B tries the owner-only route in A's organization (expect 403, role too low)
+GET http://localhost:4000/api/v1/demo/owner-only
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{loginA.response.body.$.memberships[0].organizationId}}
+
+### 11. B on the owner-only route in B's own organization (expect 200)
+GET http://localhost:4000/api/v1/demo/owner-only
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{loginB.response.body.$.memberships[0].organizationId}}
+
+### 12. Log in as A again so the cookie jar holds A's refresh cookie
+# @name loginA2
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }
+
+### 13. Works now (expect 200)
+GET http://localhost:4000/api/v1/me
+Authorization: Bearer {{loginA2.response.body.$.accessToken}}
+
+### 14. Log out
+POST http://localhost:4000/api/v1/auth/logout
+
+### 15. Same token, still within its 15 minutes (expect 401)
+GET http://localhost:4000/api/v1/me
+Authorization: Bearer {{loginA2.response.body.$.accessToken}}

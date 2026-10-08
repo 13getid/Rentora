@@ -6,6 +6,8 @@ import { errorHandler, notFound } from "./middleware/errorHandler";
 import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./routes/health";
 import cookieParser from "cookie-parser";
+import { guardDemoRouter } from "./routes/guardDemo";
+import { meRouter } from "./routes/me";
 
 export function createApp() {
   const app = express();
@@ -19,6 +21,8 @@ export function createApp() {
 
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/me", meRouter);
+  app.use("/api/v1/demo", guardDemoRouter);
 
   app.use(notFound); // after all routes
   app.use(errorHandler); // always last
