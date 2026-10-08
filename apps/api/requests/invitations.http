@@ -1,0 +1,140 @@
+@orgA = e312ace9-cf22-4c43-a8fa-6ccdfe6240b8
+@orgB = e312ace9-cf22-4c43-a8fa-6ccdfe6240b8
+@propertyA = 1c7022ca-28c7-49e4-b54b-0b15bd1ec087
+@managerMembershipId = PASTE-AFTER-STEP-9
+
+### Log in as owner A (Test Estates)
+# @name loginA
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }
+
+### Log in as owner B (Second Estates, and a TENANT in Test Estates)
+# @name loginB
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "second@example.com", "password": "CorrectHorse2026" }
+
+### 1. A lists properties: copy the id of "A Court" into @propertyA above
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 2. A invites a manager (expect 201 with devToken; the email also prints in your terminal)
+# @name invite
+POST http://localhost:4000/api/v1/invitations
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "email": "manager@example.com", "role": "MANAGER" }
+
+### 3. Invite someone as OWNER (expect 422: not allowed)
+POST http://localhost:4000/api/v1/invitations
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "email": "boss@example.com", "role": "OWNER" }
+
+### 4. B is only a TENANT in Test Estates and tries to invite (expect 403)
+POST http://localhost:4000/api/v1/invitations
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgA}}
+Content-Type: application/json
+
+{ "email": "friend@example.com", "role": "TENANT" }
+
+### 5. Invite someone who is already a member (expect 409)
+POST http://localhost:4000/api/v1/invitations
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "email": "second@example.com", "role": "TENANT" }
+
+### 6. Accept with a made-up token (expect 400 INVITATION_INVALID)
+POST http://localhost:4000/api/v1/auth/invitations/accept
+Content-Type: application/json
+
+{ "token": "this-token-does-not-exist-at-all", "fullName": "Mary Manager", "password": "CorrectHorse2026" }
+
+### 7. Accept with the real token (expect 201, role MANAGER)
+POST http://localhost:4000/api/v1/auth/invitations/accept
+Content-Type: application/json
+
+{ "token": "{{invite.response.body.$.devToken}}", "fullName": "Mary Manager", "password": "CorrectHorse2026" }
+
+### 8. Reuse the same token (expect 400: single use)
+POST http://localhost:4000/api/v1/auth/invitations/accept
+Content-Type: application/json
+
+{ "token": "{{invite.response.body.$.devToken}}", "fullName": "Mary Manager", "password": "CorrectHorse2026" }
+
+### 9. A lists members: copy Mary's membershipId into @managerMembershipId above
+GET http://localhost:4000/api/v1/members
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### Log in as the manager
+# @name loginM
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "manager@example.com", "password": "CorrectHorse2026" }
+
+### 10. Manager lists properties with NO grant (expect an empty list)
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 11. Manager opens A Court directly (expect 404, same as "doesn't exist")
+GET http://localhost:4000/api/v1/demo/properties/{{propertyA}}
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 12. A grants Mary access to A Court (expect 201)
+# @name grant
+POST http://localhost:4000/api/v1/properties/{{propertyA}}/grants
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "membershipId": "{{managerMembershipId}}" }
+
+### 13. Manager lists again (expect "A Court")
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 14. Manager opens A Court (expect 200)
+GET http://localhost:4000/api/v1/demo/properties/{{propertyA}}
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 15. Manager tries to grant access to themselves (expect 403)
+POST http://localhost:4000/api/v1/properties/{{propertyA}}/grants
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "membershipId": "{{managerMembershipId}}" }
+
+### 16. B (owner of ANOTHER organization) tries to revoke A's grant (expect 404)
+DELETE http://localhost:4000/api/v1/grants/{{grant.response.body.$.id}}
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgB}}
+
+### 17. A revokes the grant (expect 204)
+DELETE http://localhost:4000/api/v1/grants/{{grant.response.body.$.id}}
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 18. Manager, SAME token as before, is locked out at once (expect 404)
+GET http://localhost:4000/api/v1/demo/properties/{{propertyA}}
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 19. A grants again, expiring in 1 minute (expect 201)
+POST http://localhost:4000/api/v1/properties/{{propertyA}}/grants
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "membershipId": "{{managerMembershipId}}", "expiresAt": "{{$datetime iso8601 1 m}}" }
+
+### 20. Manager opens it now (expect 200). Wait 60+ seconds and send again (expect 404)
+GET http://localhost:4000/api/v1/demo/properties/{{propertyA}}
+Authorization: Bearer {{loginM.response.body.$.accessToken}}
+
+### 21. A views the grants for this property (states: REVOKED, ACTIVE or EXPIRED)
+GET http://localhost:4000/api/v1/properties/{{propertyA}}/grants
+Authorization: Bearer {{loginA.response.body.$.accessToken}}

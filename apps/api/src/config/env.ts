@@ -10,6 +10,7 @@ const schema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, "Use a random secret of at least 32 characters."),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(7),
+  WEB_URL: z.string().url().default("http://localhost:5173"),
 });
 
 const parsed = schema.safeParse(process.env);

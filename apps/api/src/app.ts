@@ -8,6 +8,9 @@ import { healthRouter } from "./routes/health";
 import cookieParser from "cookie-parser";
 import { guardDemoRouter } from "./routes/guardDemo";
 import { meRouter } from "./routes/me";
+import { accessRouter } from "./modules/access/access.routes";
+import { acceptRouter } from "./modules/invitations/accept.routes";
+import { invitationsRouter } from "./modules/invitations/invitations.routes";
 
 export function createApp() {
   const app = express();
@@ -25,6 +28,9 @@ export function createApp() {
   app.use("/api/v1/demo", guardDemoRouter);
 
   app.use(notFound); // after all routes
+  app.use("/api/v1/auth/invitations", acceptRouter);
+  app.use("/api/v1/invitations", invitationsRouter);
+  app.use("/api/v1", accessRouter);
   app.use(errorHandler); // always last
 
   return app;

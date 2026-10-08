@@ -38,3 +38,6 @@ export const generateRefreshToken = () => randomBytes(32).toString("base64url");
 
 // One-way fingerprint. We store this, never the token itself.
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+// A random single-purpose token (invitation links). Same strength as the refresh token.
+export const generateOpaqueToken = () => randomBytes(32).toString("base64url");
