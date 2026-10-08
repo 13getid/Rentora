@@ -1,0 +1,51 @@
+### 1. Valid signup (expect 201)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "fullName": "Test Owner",
+  "email": "owner@example.com",
+  "password": "CorrectHorse2026",
+  "organizationName": "Test Estates"
+}
+
+### 2. Same email again (expect 409)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "fullName": "Test Owner",
+  "email": "owner@example.com",
+  "password": "CorrectHorse2026",
+  "organizationName": "Test Estates"
+}
+
+### 3. Weak password and bad email (expect 422 with a details list)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "fullName": "A",
+  "email": "not-an-email",
+  "password": "short",
+  "organizationName": "X"
+}
+
+### 4. Mass-assignment attempt (expect 422)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{
+  "fullName": "Sneaky User",
+  "email": "sneaky@example.com",
+  "password": "CorrectHorse2026",
+  "organizationName": "Sneaky Estates",
+  "role": "ADMIN",
+  "isSystemAdmin": true
+}
+
+### 5. Broken JSON (expect 400)
+POST http://localhost:4000/api/v1/auth/signup
+Content-Type: application/json
+
+{ "fullName": "Oops", "email": "oops@example.com", "password": "oops", "organizationName": "Oops Estates" }

@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import { env } from "./config/env";
 import { errorHandler, notFound } from "./middleware/errorHandler";
+import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./routes/health";
 
 export function createApp() {
@@ -15,6 +16,7 @@ export function createApp() {
   app.use(express.json({ limit: "100kb" })); // read JSON bodies, reject huge ones
 
   app.use("/api/v1/health", healthRouter);
+  app.use("/api/v1/auth", authRouter);
 
   app.use(notFound); // after all routes
   app.use(errorHandler); // always last
