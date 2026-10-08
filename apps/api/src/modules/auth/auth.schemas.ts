@@ -17,3 +17,14 @@ export const signupSchema = z
   .strict(); // unknown fields (like "role") are an error, not silently ignored
 
 export type SignupInput = z.infer<typeof signupSchema>;
+
+
+export const loginSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email("Enter a valid email address."),
+    // No length rule here: login should never reveal what the password rules are.
+    password: z.string().min(1, "Enter your password.").max(128),
+  })
+  .strict();
+
+export type LoginInput = z.infer<typeof loginSchema>;

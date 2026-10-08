@@ -49,3 +49,32 @@ POST http://localhost:4000/api/v1/auth/signup
 Content-Type: application/json
 
 { "fullName":"Oops",
+
+
+### 6. Login (expect 200, a Set-Cookie header, and an accessToken in the body)
+# @name login
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }
+
+### 7. Wrong password (expect 401)
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "WrongPassword123" }
+
+### 8. Unknown email (expect the IDENTICAL 401 message)
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "nobody@example.com", "password": "WrongPassword123" }
+
+### 9. Refresh (expect 200 and a new accessToken; REST Client sends the cookie for you)
+POST http://localhost:4000/api/v1/auth/refresh
+
+### 10. Logout (expect 204)
+POST http://localhost:4000/api/v1/auth/logout
+
+### 11. Refresh after logout (expect 401)
+POST http://localhost:4000/api/v1/auth/refresh
