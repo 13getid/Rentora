@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import type { Role } from "../lib/roles";
 import { verifyAccessToken } from "../lib/tokens";
 import { AppError } from "./errorHandler";
+import { withSystem } from "../lib/tenantDb";
 
 const unauthenticated = () => new AppError(401, "UNAUTHENTICATED", "Please log in to continue.");
 
@@ -40,7 +41,8 @@ export const requireOrg: RequestHandler = async (req, _res, next) => {
   }
 
   // The DATABASE decides which memberships exist. The header only narrows the search.
-  const memberships = await prisma.membership.findMany({
+const memberships = await withSystem((tx) =>
+  tx.membership.findMany({
     where: {
       userId,
       status: "ACTIVE",
@@ -48,7 +50,8 @@ export const requireOrg: RequestHandler = async (req, _res, next) => {
       ...(requested ? { organizationId: requested } : {}),
     },
     select: { id: true, organizationId: true, role: true },
-  });
+  }),
+);
 
   if (memberships.length === 0) {
     // Same answer for "not a member" and "no such organization".

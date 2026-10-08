@@ -1,6 +1,8 @@
 import { env } from "../../config/env";
+import { writeAudit } from "../../lib/audit";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
+import { withSystem } from "../../lib/tenantDb";
 import { generateRefreshToken, hashToken, signAccessToken } from "../../lib/tokens";
 import { AppError } from "../../middleware/errorHandler";
 import type { LoginInput, SignupInput } from "./auth.schemas";
@@ -21,7 +23,8 @@ export async function signup(input: SignupInput, meta: RequestMeta) {
   const passwordHash = await hashPassword(input.password);
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    // System context: the organization doesn't exist yet, so there is no org to scope to.
+    return await withSystem(async (tx) => {
       const organization = await tx.organization.create({ data: { name: input.organizationName } });
       const user = await tx.user.create({
         data: { email: input.email, passwordHash, fullName: input.fullName, phone: input.phone },
@@ -54,13 +57,12 @@ export async function signup(input: SignupInput, meta: RequestMeta) {
 }
 
 // ------------------------------------------------------- session helper
-// One row in `sessions` = one logged-in device.
 async function startSession(userId: string, meta: RequestMeta) {
   const refreshToken = generateRefreshToken();
   const session = await prisma.session.create({
     data: {
       userId,
-      refreshTokenHash: hashToken(refreshToken), // store the hash only
+      refreshTokenHash: hashToken(refreshToken),
       expiresAt: new Date(Date.now() + REFRESH_MS),
       ip: meta.ip,
       userAgent: meta.userAgent,
@@ -70,50 +72,44 @@ async function startSession(userId: string, meta: RequestMeta) {
   return { accessToken, refreshToken };
 }
 
-// A real hash of a throwaway password, used when the email doesn't exist.
 let dummyHash: Promise<string> | undefined;
 const getDummyHash = () => (dummyHash ??= hashPassword("not-a-real-password"));
 
 // ----------------------------------------------------------------- login
 export async function login(input: LoginInput, meta: RequestMeta) {
-  const user = await prisma.user.findUnique({
-    where: { email: input.email },
-    include: {
-      memberships: {
-        where: { status: "ACTIVE", organization: { status: "ACTIVE" } },
-        include: { organization: true },
+  // System context: we are finding out WHICH organizations this person belongs to.
+  const user = await withSystem((tx) =>
+    tx.user.findUnique({
+      where: { email: input.email },
+      include: {
+        memberships: {
+          where: { status: "ACTIVE", organization: { status: "ACTIVE" } },
+          include: { organization: true },
+        },
       },
-    },
-  });
+    }),
+  );
 
-  // ALWAYS run one password verification, even for unknown emails. Otherwise
-  // "no such user" answers instantly and "wrong password" takes ~100ms, and an
-  // attacker can measure that difference to discover registered emails.
   const passwordOk = await verifyPassword(user?.passwordHash ?? (await getDummyHash()), input.password);
 
   if (!user || !passwordOk) {
-    await prisma.auditLog.create({
-      data: { actorUserId: user?.id, action: "auth.login_failed", ip: meta.ip, userAgent: meta.userAgent },
-    });
-    // One message for both cases, on purpose.
+    await writeAudit({ actorUserId: user?.id, action: "auth.login_failed", ip: meta.ip, userAgent: meta.userAgent });
     throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect.");
   }
 
   const { accessToken, refreshToken } = await startSession(user.id, meta);
 
-  await prisma.auditLog.create({
-    data: {
-      organizationId: user.memberships[0]?.organizationId,
-      actorUserId: user.id,
-      action: "auth.login",
-      ip: meta.ip,
-      userAgent: meta.userAgent,
-    },
+  await writeAudit({
+    organizationId: user.memberships[0]?.organizationId,
+    actorUserId: user.id,
+    action: "auth.login",
+    ip: meta.ip,
+    userAgent: meta.userAgent,
   });
 
   return {
     accessToken,
-    refreshToken, // the route moves this into a cookie and removes it from the JSON
+    refreshToken,
     user: { id: user.id, email: user.email, fullName: user.fullName, isSystemAdmin: user.isSystemAdmin },
     memberships: user.memberships.map((m) => ({
       organizationId: m.organizationId,
@@ -132,30 +128,29 @@ export async function refresh(refreshToken: string | undefined, meta: RequestMet
   const session = await prisma.session.findUnique({ where: { refreshTokenHash: hashToken(refreshToken) } });
   if (!session) throw unauthorized();
 
-  // "Claim" the token with ONE atomic statement: it only succeeds if the session
-  // is still unused and unexpired. If two requests race, exactly one wins (count 1).
   const claimed = await prisma.session.updateMany({
     where: { id: session.id, revokedAt: null, expiresAt: { gt: new Date() } },
     data: { revokedAt: new Date() },
   });
 
   if (claimed.count === 0) {
-    // This token was already used or revoked. Seconds ago: probably a tab race.
-    // Long ago: someone is replaying an old token, so assume theft and end every session.
     const replayedLongAfter = session.revokedAt && Date.now() - session.revokedAt.getTime() > REUSE_GRACE_MS;
     if (replayedLongAfter) {
       await prisma.session.updateMany({
         where: { userId: session.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      await prisma.auditLog.create({
-        data: { actorUserId: session.userId, action: "auth.refresh_reuse_detected", ip: meta.ip, userAgent: meta.userAgent },
+      await writeAudit({
+        actorUserId: session.userId,
+        action: "auth.refresh_reuse_detected",
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
     }
     throw unauthorized();
   }
 
-  return startSession(session.userId, meta); // rotation: a brand-new refresh token
+  return startSession(session.userId, meta);
 }
 
 // ---------------------------------------------------------------- logout

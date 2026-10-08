@@ -1,0 +1,70 @@
+@orgA = e312ace9-cf22-4c43-a8fa-6ccdfe6240b8
+@orgB = f97b4db1-f3b4-471f-9ca8-bcf59673eff8
+
+### Log in as A
+# @name loginA
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }
+
+### Log in as B
+# @name loginB
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "second@example.com", "password": "CorrectHorse2026" }
+
+### 1. A creates a property (expect 201)
+POST http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "name": "A Court" }
+
+### 2. B creates a property in B's own organization (expect 201)
+POST http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgB}}
+Content-Type: application/json
+
+{ "name": "B Towers" }
+
+### 3. A lists properties, code has NO filter (expect ONLY "A Court")
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 4. B lists properties in B's organization (expect ONLY "B Towers")
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgB}}
+
+### 5. Forgot withOrg (expect an empty list: fails closed)
+GET http://localhost:4000/api/v1/demo/properties-no-context
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+
+### 6. B reaches into A's organization as a TENANT and lists (expect "A Court", read allowed here)
+GET http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgA}}
+
+### 7. B as TENANT tries to create in A (expect 403, role check)
+POST http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginB.response.body.$.accessToken}}
+X-Organization-Id: {{orgA}}
+Content-Type: application/json
+
+{ "name": "Hacked Property" }
+
+### 8. Smuggling an organization into the body (expect 422, strict schema)
+POST http://localhost:4000/api/v1/demo/properties
+Authorization: Bearer {{loginA.response.body.$.accessToken}}
+Content-Type: application/json
+
+{ "name": "Sneaky", "organizationId": "{{orgB}}" }
+
+### 9. Login still works under RLS (expect 200)
+POST http://localhost:4000/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "owner@example.com", "password": "CorrectHorse2026" }

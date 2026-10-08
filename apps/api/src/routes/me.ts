@@ -1,13 +1,14 @@
 import { Router } from "express";
-import { prisma } from "../lib/prisma";
 import { authenticate, getAuth } from "../middleware/auth";
+import { withSystem } from "../lib/tenantDb";
 
 export const meRouter = Router();
 
 // "Who am I, and where do I belong?" The React app calls this right after login
 // to decide which portal to show.
 meRouter.get("/", authenticate, async (req, res) => {
-  const user = await prisma.user.findUniqueOrThrow({
+  const user = await withSystem((tx) =>
+  tx.user.findUniqueOrThrow({
     where: { id: getAuth(req).userId },
     select: {
       id: true,
@@ -20,6 +21,8 @@ meRouter.get("/", authenticate, async (req, res) => {
         select: { organizationId: true, role: true, organization: { select: { name: true } } },
       },
     },
-  });
-  res.json(user);
+  }),
+);
+res.json(user);
 });
+
